@@ -37,7 +37,4 @@ plt.ylabel('SalePrice', fontsize=13)
 
 plt.show()
 ```
-![Graph1](https://imgur.com/AKD6FgK)
-
-
-
+![Graph1](img/Schermata1FonZBetaZeta5.png)
