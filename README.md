@@ -3,7 +3,7 @@
 
 The ultimate goal of this project is to predict the prices of houses based on given variables.  
 I set about doing this in a few steps:
-### Step 1: Data Processing
+## Step 1: Data Processing
 First things first, I took a look at the data and removed unnecessary columns:  
 ```
 train = pd.read_csv('C:/Users/Luke/Downloads/train.csv')  
@@ -28,6 +28,12 @@ test.drop("Id", axis=1, inplace=True)
 print("\nThe train data size after dropping Id feature is : {} ".format(train.shape))  
 print("The test data size after dropping Id feature is : {} ".format(test.shape))
 ```
+
+>The train data size before dropping Id feature is : (1460, 81)   
+>The test data size before dropping Id feature is : (1459, 80)   
+>The train data size after dropping Id feature is : (1460, 80)   
+>The test data size after dropping Id feature is : (1459, 79)    
+
 Next I took a look at the outliers that were mentioned by the Ames Housing Data Documentation:
 ```
 fig, ax = plt.subplots()
@@ -37,7 +43,7 @@ plt.ylabel('SalePrice', fontsize=13)
 
 plt.show()
 ```
-![Graph1](https://i.imgur.com/AKD6FgK.png)  
+![Graph1](https://i.imgur.com/AKD6FgK.png)    
 The documentation recommended deleting all data with GrLivArea > 4000, however the upper 2 'outliers' fit in, whereas the bottom 2 definitely dont.  
 I didn't want to be excessive with the outlier removal as it could negatively impact the models if there are also outliers in the test data, so I just chose to remove the egregious ones:
 ```# Deleting outliers
@@ -50,7 +56,7 @@ plt.xlabel('GrLivArea', fontsize=13)
 plt.ylabel('SalePrice', fontsize=13)
 plt.show()
 ```
-![Graph2](https://i.imgur.com/UN4865e.png)
+![Graph2](https://i.imgur.com/UN4865e.png)  
 
 Next I checked the relationship between the 'main' features in a multiplot format to get a better overall feel for the data. I found these features with the correlation matrix shown a bit later:
 ```#scatterplot
@@ -59,7 +65,7 @@ cols = ['SalePrice', 'OverallQual', 'GrLivArea', 'GarageCars', 'TotalBsmtSF', 'F
 sns.pairplot(train[cols])
 plt.show()
 ```
-![Graph3](https://i.imgur.com/vomRVPq.png)  
+![Graph3](https://i.imgur.com/vomRVPq.png)    
 
 SalePrice is the target variable that I'm going to try to predict, so I did some analysis on it, getting the mu and sigma values and finding the distribution and probability plots:
 ```
@@ -77,7 +83,8 @@ plt.legend(['Normal dist. ($\mu=$ {:.2f} and $\sigma=$ {:.2f} )'.format(mu, sigm
 plt.ylabel('Frequency')
 plt.title('SalePrice distribution')
 ```
-![Graph4](https://i.imgur.com/u9jbNlx.png)
+> mu = 180932.92 and sigma = 79467.79  
+![Graph4](https://i.imgur.com/u9jbNlx.png)  
 
 ```
 #Get the QQ-plot
@@ -85,7 +92,7 @@ fig = plt.figure()
 res = stats.probplot(train['SalePrice'], plot=plt)
 plt.show()
 ```
-![Graph5](https://i.imgur.com/bwCPfUo.png) 
+![Graph5](https://i.imgur.com/bwCPfUo.png)   
 
 This shows that the SalePrice variable is right skewed. I'll need to transform it to a normal distribution for the models to work properly:
 
@@ -111,10 +118,11 @@ fig = plt.figure()
 res = stats.probplot(train['SalePrice'], plot=plt)
 plt.show()
 ```
+> mu = 12.02 and sigma = 0.40  
 ![Graph6](https://i.imgur.com/x8Wmq8W.png)
-![Graph7](https://i.imgur.com/0R0YmDb.png)
+![Graph7](https://i.imgur.com/0R0YmDb.png)  
 
-##Step 2: Features Engineering  
+## Step 2: Features Engineering  
 
 Now I linked the train and test data together: (**NB: this is a mistake that allows for data-leakage, will be fixed in the future**)
 ```
@@ -280,6 +288,7 @@ for c in cols:
 print('Shape all_data: {}'.format(all_data.shape))
 ```
 > Shape all_data: (2917, 78)  
+
 I also added a new feature showing the total square footage, as this seems very important to house pricing: **NB: In the future I will also add a few more features as well as combine some of the 'Garage' and 'Basement' features as some of them depict the exact same information**
 ```
 # Adding total sqfootage feature 
@@ -307,6 +316,129 @@ KitchenAbvGr | 4.300550
 BsmtFinSF2	| 4.144503
 EnclosedPorch | 4.002344
 ScreenPorch	| 3.945101
+
+Next I used a box-cox transform on these features:
+
+```
+skewness = skewness[abs(skewness) > 0.75]
+print("There are {} skewed numerical features to Box Cox transform".format(skewness.shape[0]))
+
+from scipy.special import boxcox1p
+skewed_features = skewness.index
+lam = 0.15
+for feat in skewed_features:
+    #all_data[feat] += 1
+    all_data[feat] = boxcox1p(all_data[feat], lam)
+    
+#all_data[skewed_features] = np.log1p(all_data[skewed_features])
+```
+> There are 59 skewed numerical features to Box Cox transform
+
+Then I got the dummy categorical variables:
+```
+all_data = pd.get_dummies(all_data)
+print(all_data.shape)
+```
+>(2917, 220)
+
+## Step 3: Modelling
+
+I got the newly created train and test sets:
+```
+train = all_data[:ntrain]
+test = all_data[ntrain:]
+```
+Imported the libraries I'd be needing:
+```
+from sklearn.linear_model import ElasticNet, Lasso,  BayesianRidge, LassoLarsIC
+from sklearn.ensemble import RandomForestRegressor,  GradientBoostingRegressor
+from sklearn.kernel_ridge import KernelRidge
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import RobustScaler
+from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.metrics import mean_squared_error
+import xgboost as xgb
+import lightgbm as lgb
+```
+To prevent overfitting, it is common in supervised machine learning to split the data and hold part of it as a 'test set'.  
+However there is still a risk of overfitting on the test set, and so we hold out another part of the dataset to use as a 'validation set'  
+We train on the training set, after which evaluation is done on the validation set, and when the experiment seems to be successful, final evaluation can be done on the test set.  
+However, by splitting the data into three sets, the number of samples that can be used for learning the model is reduced, which can make the results more random. As our data set isn't massive, I decided to estimate the score via Cross Validation, as this method eliminates the need for a validation set, and so doesn't waste as much data. I used sklearn's cross_val_score function for this, and added in a line to shuffle the dataset prior to cross validation:  
+
+```
+#Validation function
+n_folds = 5
+
+def rmsle_cv(model):
+    kf = KFold(n_folds, shuffle=True, random_state=42).get_n_splits(train.values)
+    rmse= np.sqrt(-cross_val_score(model, train.values, y_train, scoring="neg_mean_squared_error", cv = kf))
+    return(rmse)
+```  
+I then used LASSO Regression as the model. I also used sklearn's Robustscaler() method on pipeline to make the model less sensitive to the potential outliers mentioned at the beginning
+```
+lasso = make_pipeline(RobustScaler(), Lasso(alpha =0.0005, random_state=1))
+score = rmsle_cv(lasso)
+print("\nLasso score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+```
+> Lasso score: 0.1115 (0.0074)  
+
+**NB: I have since included some other models, however it seems that LASSO Regression still provides the best result**  
+
+```
+ENet = make_pipeline(RobustScaler(), ElasticNet(alpha=0.0005, l1_ratio=.9, random_state=3))
+
+KRR = KernelRidge(alpha=0.6, kernel='polynomial', degree=2, coef0=2.5)
+
+GBoost = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.05,
+                                   max_depth=4, max_features='sqrt',
+                                   min_samples_leaf=15, min_samples_split=10, 
+                                   loss='huber', random_state =5)
+
+model_xgb = xgb.XGBRegressor(colsample_bytree=0.4603, gamma=0.0468, 
+                             learning_rate=0.05, max_depth=3, 
+                             min_child_weight=1.7817, n_estimators=2200,
+                             reg_alpha=0.4640, reg_lambda=0.8571,
+                             subsample=0.5213, silent=1,
+                             random_state =7, nthread = -1)
+
+model_lgb = lgb.LGBMRegressor(objective='regression',num_leaves=5,
+                              learning_rate=0.05, n_estimators=720,
+                              max_bin = 55, bagging_fraction = 0.8,
+                              bagging_freq = 5, feature_fraction = 0.2319,
+                              feature_fraction_seed=9, bagging_seed=9,
+                              min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)
+```
+```
+score = rmsle_cv(ENet)
+print("ElasticNet score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+```
+> ElasticNet score: 0.1116 (0.0074)
+
+```score = rmsle_cv(KRR)
+print("Kernel Ridge score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+```
+> Kernel Ridge score: 0.1153 (0.0075)
+
+```score = rmsle_cv(GBoost)
+print("Gradient Boosting score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+```
+> Gradient Boosting score: 0.1167 (0.0083)
+
+```score = rmsle_cv(model_xgb)
+print("Xgboost score: {:.4f} ({:.4f})\n".format(score.mean(), score.std()))
+```
+> Xgboost score: 0.1164 (0.0070)
+
+```
+score = rmsle_cv(model_lgb)
+print("LGBM score: {:.4f} ({:.4f})\n" .format(score.mean(), score.std()))
+```
+> LGBM score: 0.1161 (0.0058)
+
+
+
+
 
 
 
