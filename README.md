@@ -4,7 +4,7 @@
 The ultimate goal of this project is to predict the prices of houses based on given variables.  
 I set about doing this in a few steps:
 ## Step 1: Data Processing
-First things first, I took a look at the data and removed unnecessary columns:  
+First things first, I used panda's read_csv to read the train and test data, and I took a look at the data and removed unnecessary columns:  
 ```
 train = pd.read_csv('C:/Users/Luke/Downloads/train.csv')  
 test = pd.read_csv('C:/Users/Luke/Downloads/test.csv') 
